@@ -1,9 +1,12 @@
 import requests
 import sqlite3
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error
 
 # Connect to fpl api
 FPL_API_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
-
 response = requests.get(FPL_API_URL)
 
 # Print the number of players in FPL
@@ -38,17 +41,34 @@ conn.commit()
 conn.close()
 print("Data inserted successfully!")
 
-# Example - All players that play for specified team
+data = response.json()
 
-response = requests.get(FPL_API_URL)
-if response.status_code == 200:
-    data = response.json()
+# Dataframe creation
+players_df = pd.DataFrame(data["elements"])
+features = ["form", "total_points", "minutes", "now_cost", "threat", "creativity", "influence"]
+target = "event_points"  
 
-    team_players = [p for p in data["elements"] if p["team"] == 1] # Arsenal's team id is 1, alphabetical order
-    sorted_players = sorted(team_players, key=lambda p: p["total_points"], reverse=True)
+# Train Test Split to predict points
+X = players_df[features]
+y = players_df[target]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Display results
-    for player in sorted_players:
-        print(f"{player['first_name']} {player['second_name']} - {player['now_cost'] / 10}M - {player['total_points']} pts")
-else:
-    print("Failed to fetch data")
+# Model training
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# Model evaluation
+y_pred = model.predict(X_test)
+
+# Decided on mae for evaluation metric
+mae = mean_absolute_error(y_test, y_pred)
+print(f"Mean Absolute Error: {mae}")
+
+def predict_player_points(player_id):
+    player = players_df[players_df["id"] == player_id][features]
+    prediction = model.predict(player)
+    return prediction[0]
+
+player_id = 328  # use search.py to find player ID
+predicted_points = predict_player_points(player_id)
+print(f"Predicted Points for Player {player_id}: {predicted_points}")
