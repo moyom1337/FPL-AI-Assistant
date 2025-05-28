@@ -64,11 +64,20 @@ y_pred = model.predict(X_test)
 mae = mean_absolute_error(y_test, y_pred)
 print(f"Mean Absolute Error: {mae}")
 
+# Take in the player ID and use trained model to predict points for player.
 def predict_player_points(player_id):
     player = players_df[players_df["id"] == player_id][features]
     prediction = model.predict(player)
     return prediction[0]
 
-player_id = 328  # use search.py to find player ID
+player_id = 99  # use search.py to find player ID
+player_row = players_df[players_df["id"] == player_id]
+
+if not player_row.empty:
+    full_name = player_row.iloc[0]["first_name"] + " " + player_row.iloc[0]["second_name"]
+
 predicted_points = predict_player_points(player_id)
-print(f"Predicted Points for Player {player_id}: {predicted_points}")
+print(f"Predicted Points for {full_name}: {predicted_points}")
+
+# Close the database connection
+conn.close()
