@@ -8,6 +8,8 @@ from sklearn.metrics import mean_absolute_error
 # Connect to fpl api
 FPL_API_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 response = requests.get(FPL_API_URL)
+FIXTURES_API_URL = "https://fantasy.premierleague.com/api/fixtures/"
+fixtures = requests.get(FIXTURES_API_URL).json()
 
 # Print the number of players in FPL
 if response.status_code == 200:
@@ -43,9 +45,45 @@ print("Data inserted successfully!")
 
 data = response.json()
 
-# Dataframe creation
+# Create a DataFrame for positions
+positions_df = pd.DataFrame(data["element_types"])
+positions_df = positions_df.rename(columns={"id": "element_type", "singular_name": "position"})
+
+# Create a Dataframe for players
 players_df = pd.DataFrame(data["elements"])
-features = ["form", "total_points", "minutes", "now_cost", "threat", "creativity", "influence"]
+players_df = players_df.merge(positions_df[["element_type", "position"]], on="element_type", how="left")
+
+# Create a DataFrame for teams
+teams_df = pd.DataFrame(data["teams"])
+
+next_fixture_fdr = {}
+
+for fixture in fixtures:
+    if fixture["event"] is not None:
+        home_id = fixture["team_h"]
+        away_id = fixture["team_a"]
+        
+        # If not already added (i.e., first upcoming fixture), add it
+        if home_id not in next_fixture_fdr:
+            next_fixture_fdr[home_id] = fixture["team_h_difficulty"]
+        if away_id not in next_fixture_fdr:
+            next_fixture_fdr[away_id] = fixture["team_a_difficulty"]
+
+# Add the fixture difficulty rating to the players DataFrame
+players_df["fdr_next"] = players_df["team"].map(next_fixture_fdr)
+
+# Fill NaN values in 'fdr_next' with 0
+players_df["fdr_next"] = players_df["fdr_next"].fillna(0)
+
+# Encode positions using numbers
+players_df["position_code"] = players_df["position"].map({
+    "Goalkeeper": 1,
+    "Defender": 2,
+    "Midfielder": 3,
+    "Forward": 4
+})
+
+features = ["form", "total_points", "minutes", "now_cost", "threat", "creativity", "influence", "fdr_next", "position_code"]
 target = "event_points"  
 
 # Train Test Split to predict points
@@ -70,7 +108,7 @@ def predict_player_points(player_id):
     prediction = model.predict(player)
     return prediction[0]
 
-player_id = 99  # use search.py to find player ID
+player_id = 328  # use search.py to find player ID
 player_row = players_df[players_df["id"] == player_id]
 
 if not player_row.empty:
